@@ -1,0 +1,72 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: akka-cluster
+        image: lkysow/akka-cluster:latest
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: CLUSTER_ROLES
+          value: frontend
+        ports:
+        - containerPort: 8080
+        - containerPort: 2552
+        livenessProbe:
+          httpGet:
+            path: /?msg=hotdog
+            port: 8080
+          initialDelaySeconds: 10
+          timeoutSeconds: 2
+        readinessProbe:
+          httpGet:
+            path: /?msg=hotdog
+            port: 8080
+          initialDelaySeconds: 0
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: akka-cluster
+spec:
+  selector:
+    app: frontend
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: akka-cluster
+        image: lkysow/akka-cluster:latest
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: CLUSTER_ROLES
+          value: backend
+        ports:
+        - containerPort: 2552
