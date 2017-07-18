@@ -11,7 +11,8 @@ spec:
     spec:
       containers:
       - name: akka-cluster
-        image: lkysow/akka-cluster:latest
+        image: lkysow/akka-cluster
+        imagePullPolicy: Always
         env:
         - name: POD_IP
           valueFrom:
@@ -21,23 +22,30 @@ spec:
           value: frontend
         ports:
         - containerPort: 8080
-        - containerPort: 2552
+        - containerPort: 2551
+        resources:
+          requests:
+            cpu: 0.5
+            memory: 512Mi
+          limits:
+            cpu: 1.5
+            memory: 1Gi
         livenessProbe:
           httpGet:
-            path: /?msg=hotdog
+            path: /health
             port: 8080
-          initialDelaySeconds: 10
+          initialDelaySeconds: 30
           timeoutSeconds: 2
         readinessProbe:
           httpGet:
-            path: /?msg=hotdog
+            path: /health
             port: 8080
           initialDelaySeconds: 0
 ---
 kind: Service
 apiVersion: v1
 metadata:
-  name: akka-cluster
+  name: nothotdog
 spec:
   selector:
     app: frontend
@@ -60,7 +68,8 @@ spec:
     spec:
       containers:
       - name: akka-cluster
-        image: lkysow/akka-cluster:latest
+        image: lkysow/akka-cluster
+        imagePullPolicy: Always
         env:
         - name: POD_IP
           valueFrom:
@@ -69,4 +78,21 @@ spec:
         - name: CLUSTER_ROLES
           value: backend
         ports:
-        - containerPort: 2552
+        - containerPort: 2551
+        resources:
+          requests:
+            cpu: 0.5
+            memory: 512Mi
+          limits:
+            cpu: 1.5
+            memory: 1Gi
+        readinessProbe:
+          tcpSocket:
+            port: 2551
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 2551
+          initialDelaySeconds: 15
+          periodSeconds: 20

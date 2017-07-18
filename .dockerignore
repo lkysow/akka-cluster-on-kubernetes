@@ -1,0 +1,2 @@
+target/*
+!target/scala-2.12/akka-cluster-on-kubernetes-assembly-0.1.jar

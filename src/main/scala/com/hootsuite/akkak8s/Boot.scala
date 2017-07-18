@@ -1,27 +1,28 @@
 package com.hootsuite.akkak8s
 
-import com.typesafe.config.ConfigFactory
+import java.net.InetAddress
+
 import akka.actor.{ActorSystem, CoordinatedShutdown, Props}
 import akka.cluster.Cluster
+import akka.cluster.routing.{ClusterRouterGroup, ClusterRouterGroupSettings}
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.server.Directives._
+import akka.pattern.ask
+import akka.routing.RoundRobinGroup
 import akka.stream.ActorMaterializer
 import akka.util.Timeout
-import akka.http.scaladsl.server.Directives._
-
-import scala.concurrent.duration._
-import akka.pattern.ask
-import akka.routing.FromConfig
+import com.typesafe.config.ConfigFactory
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 object SimpleClusterApp extends App {
 
-  // Initialize config. This node's roles can be overridden by the CLUSTER_ROLES env var
+  // akka init
   val baseConfig = ConfigFactory.load()
   val overrideConfig = sys.env.get("CLUSTER_ROLES").map(roles => s"akka.cluster.roles = [$roles]").getOrElse("")
   val config = ConfigFactory.parseString(overrideConfig).withFallback(baseConfig)
 
-  // akka init
   implicit val system = ActorSystem("ClusterSystem", config)
   implicit val materializer = ActorMaterializer()
   implicit val executionContext = system.dispatcher
@@ -29,19 +30,25 @@ object SimpleClusterApp extends App {
   // initialize the cluster
   val cluster = Cluster(system)
 
-  // backend just runs the backend worker
   if (cluster.selfRoles.contains("backend")) {
     system.actorOf(Props[Backend], name = "backend")
   }
 
-  // frontend runs frontend actors and akka-http
   if (cluster.selfRoles.contains("frontend")) {
-
-    // start actors
     val backendRouter = system.actorOf(
-      FromConfig.props(Props.empty),
+      ClusterRouterGroup(
+        RoundRobinGroup(Nil),
+        ClusterRouterGroupSettings(
+          totalInstances = 1000,
+          routeesPaths = List("/user/backend"),
+          allowLocalRoutees = true,
+          useRole = Some("backend")
+        )
+      ).props(),
       name = "backendRouter")
+
     val frontend = system.actorOf(Frontend.props(backendRouter), name = "frontend")
+    val hostname = InetAddress.getLocalHost.getHostName
 
     // create HTTP routes
     val route =
@@ -50,15 +57,13 @@ object SimpleClusterApp extends App {
           parameter("msg") { (message) =>
             implicit val timeout: Timeout = 1.second
             val response: Future[NotHotDogResponse] = (frontend ? NotHotDogRequest(message)).mapTo[NotHotDogResponse]
-            complete(response.map(r => if (r.hotDog) "Hot Dog" else "Not Hot Dog"))
+            complete(response.map(r => if (r.hotDog) s"Hot Dog! (from fe: ${hostname} be: ${r.src})" else s"Not Hot Dog :( (from fe: ${hostname} be: ${r.src})"))
           }
-        } ~
-          // health check endpoint
-          path("health") {
-            get {
-              complete("OK")
-            }
-          }
+        }
+      } ~ path("health") {
+        get {
+          complete("OK")
+        }
       }
 
     // start server
@@ -72,6 +77,6 @@ object SimpleClusterApp extends App {
   }
 }
 
-final case class NotHotDogResponse(hotDog: Boolean)
+final case class NotHotDogResponse(hotDog: Boolean, src: String)
 
 final case class NotHotDogRequest(message: String)
