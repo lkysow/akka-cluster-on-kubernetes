@@ -1,6 +1,6 @@
 # Akka Cluster on Kubernetes
 Sample project for deploying Akka Cluster to Kubernetes.
-Presented at Scala Up North on July 21, 2017.
+Presented at Scala Up North on July 21, 2017. Video of presentation: [https://www.youtube.com/watch?v=Esd1UKIpvdU](https://www.youtube.com/watch?v=Esd1UKIpvdU)
 
 To run the project yourself:
 
